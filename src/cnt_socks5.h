@@ -254,7 +254,7 @@ namespace network {
 					return true;
 				});
 
-			resolver.async_resolve(asio::ip::tcp::resolver::query({ std::string("remote_host"), std::string("remote_port") }),
+			resolver.async_resolve(asio::ip::tcp::resolver::query({ std::string("your_remote_host"), std::string("your_remote_port") }),
 			[this, self_weak](const error_code& errorCode, asio::ip::tcp::resolver::iterator it) {
 				if (errorCode) {
 					DLOG(ERROR) << "resolve "<< remote_host_ << " error. code:" << errorCode.message();
@@ -350,7 +350,7 @@ namespace network {
 					return;
 				}
 
-				//free(st);
+				free(st);
 				remote_socket_.async_read_some(asio::buffer(req),
 						[this, self_weak](const error_code& errorCode, std::size_t len) {
 						if(errorCode || req[1] != 0x00) {
