@@ -1,38 +1,22 @@
-TARGET := s4ws
+TARGET := securesocks5
 
 CC := g++ -DDEBUG -DUSE_STANDALONE_ASIO -DTEST -std=c++17  
 
 #注意每行后面不要有空格，否则会算到目录名里面，导致问题
-SRC_DIR := ./oneserver ./utils ./network
+SRC_DIR := ./src 
 BUILD_DIR = tmp
 OBJ_DIR = $(BUILD_DIR)/obj
 DEPS_DIR  = $(BUILD_DIR)/deps
 
 #这里添加其他头文件路径
 INC_DIR = \
-	-I./include \
 	-I./src \
-	-I./network/export \
-	-I./utils/export \
-	-I./oneserver/message_ms \
-	-I./oneserver/src \
-	-I./oneserver/frame \
-	-I./oneserver/cache \
-	-I./oneserver/db \
-	-I./oneserver/include \
-	-I./oneserver/api \
-	-I./oneserver/silm \
-	-I./asio-1.16.1/include #\
-	#-I/usr/local/Cellar/openssl@1.1/1.1.1g/include
+	-I./asio-1.16.1/include 
 
 #这里添加编译参数 -DNDEBUG(release加这个, 并去掉-ggdb3)
-CC_FLAGS := $(INC_DIR) -ggdb3  -Wextra -Wall -march=x86-64 #-framework CoreFoundation #-ldl -std=gnu++17 #debug
+CC_FLAGS := $(INC_DIR) -ggdb3  -Wextra -Wall -march=x86-64 #-ldl -std=gnu++17 #debug
 #CC_FLAGS := $(INC_DIR) -O3 -DNDEBUG -Wextra -Wall -march=x86-64 -std=gnu++17 # release
 
-#LNK_FLAGS += -lstdc++ #-pthread #-lrt -lm 
-#LNK_LIBS += ./lib/libstdc++.a ./lib/libssp_nonshared.a
-LNK_LIBS += /usr/local/lib/libcpp_redis.a /usr/local/lib/libtacopie.a #./lib/libglog.a
-#LNK_LIBS += /Users/kkqin/Documents/glog/cmake/build/libglog.a  
 LNK_LIBS += `pkg-config --static --libs grpc++ protobuf-lite openssl glog` 
 
 #这里递归遍历3级子目录
