@@ -17,7 +17,7 @@ INC_DIR = \
 CC_FLAGS := $(INC_DIR) -ggdb3  -Wextra -Wall -march=x86-64 #-ldl -std=gnu++17 #debug
 #CC_FLAGS := $(INC_DIR) -O3 -DNDEBUG -Wextra -Wall -march=x86-64 -std=gnu++17 # release
 
-LNK_LIBS += `pkg-config --static --libs grpc++ protobuf-lite openssl glog` 
+LNK_LIBS += `pkg-config --static --libs openssl glog` 
 
 #这里递归遍历3级子目录
 DIRS := $(shell find $(SRC_DIR) -maxdepth 3 -type d)
