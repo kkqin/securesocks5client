@@ -11,6 +11,9 @@
 
 #include <glog/logging.h>
 
+static std::string your_remote_host = "";
+static std::string your_remote_port = "";
+
 namespace network {
 	template <typename Method>
 	class Socks5ConnectionImpl : public Connection
@@ -25,14 +28,17 @@ namespace network {
 			sendInProgress_(false),
 			is_auth(false),
 			resolver(*network::IOMgr::instance().netIO().get()),
-			id(index)
+			id(index),
+			total_upload(0),
+			total_download(0)
 		{
 			method_ = std::make_shared<Method>();
 		}
 
 		virtual ~Socks5ConnectionImpl()
 		{
-			DLOG(WARNING) << __func__ << " dead";
+			DLOG(WARNING) << __func__ << " dead " << "index: "<< id ;
+			DLOG(WARNING) << "upload bytes:" << total_upload << " download bytes:" << total_download;
 			method_.reset();
 			DLOG(WARNING) << __func__
 				<< ": called with closing_:" << (closing_ ? "true" : "false")
@@ -239,7 +245,7 @@ namespace network {
 						break;
 					}
 
-					DLOG(INFO) << "prepare request " << remote_host_ << ":" << remote_port_;
+					DLOG(INFO) <<"cnt: "<< id <<  " prepare request " << remote_host_ << ":" << remote_port_;
 
 					do_socks_ssl_prepare();
 			});
@@ -254,7 +260,7 @@ namespace network {
 					return true;
 				});
 
-			resolver.async_resolve(asio::ip::tcp::resolver::query({ std::string("your_remote_host"), std::string("your_remote_port") }),
+			resolver.async_resolve(asio::ip::tcp::resolver::query({ your_remote_host, your_remote_port }),
 			[this, self_weak](const error_code& errorCode, asio::ip::tcp::resolver::iterator it) {
 				if (errorCode) {
 					DLOG(ERROR) << "resolve "<< remote_host_ << " error. code:" << errorCode.message();
@@ -423,7 +429,8 @@ namespace network {
 						return;
 					}
 
-					DLOG(INFO) << "the index: "<< id << "--> " << std::to_string(len) << " bytes";
+					//DLOG(INFO) << "the index: "<< id << "--> " << std::to_string(len) << " bytes";
+					total_upload += len;
 					do_write(1, len);
 				});
 			}
@@ -438,6 +445,9 @@ namespace network {
 						closeSocket();
 						return;
 					}
+
+					//DLOG(INFO) << "the index: "<< id << "<-- " << std::to_string(len) << " bytes";
+					total_download += len;
 					do_write(2, len);
 				});
 			}
@@ -477,6 +487,8 @@ namespace network {
 
 		void closeSocket()
 		{
+			if(closing_)
+				return;
 			closing_ = true;
 
 			if (socket_.is_open())
@@ -541,6 +553,8 @@ namespace network {
 		
 		int trans_len;
 		int id;
+		long long total_upload;
+		long long total_download;
 	};
 }
 

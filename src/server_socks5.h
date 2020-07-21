@@ -25,7 +25,7 @@ namespace network {
 			: index(0), acceptor_(network::IOMgr::instance().netIO().get(),
 				port,
 				[this, onClientConnected](asio::ip::tcp::socket&& socket) {
-					DLOG(INFO) << ("onAccept()");
+					//DLOG(INFO) << ("onAccept()");
 					asio::ssl::context ctx(asio::ssl::context::sslv23);
 					ctx.load_verify_file("ca.pem");
 

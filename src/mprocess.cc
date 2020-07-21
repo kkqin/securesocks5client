@@ -22,6 +22,6 @@ namespace network {
 	void Process::onRecvGameMsg(std::shared_ptr<network::Connection> cnt)
 	{
 		cnt->init();
-		DLOG(INFO) << ("onRecvGameMsg end.");
+		//DLOG(INFO) << ("onRecvGameMsg end.");
 	}
 }

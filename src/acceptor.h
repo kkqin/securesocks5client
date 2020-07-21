@@ -57,7 +57,7 @@ private:
 			}
 			else
 			{
-				DLOG(INFO) << "Accepted connection";
+				//DLOG(INFO) << "Accepted connection";
 				onAccept_(std::move(socket_));
 			}
 
