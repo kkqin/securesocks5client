@@ -115,9 +115,10 @@ namespace network {
 			this->set_timeout(method_->timeout());
 			receiveInProgress_ = true;
 			auto self(shared_from_this());
-			asio::async_read(socket_,
-				read_buffer,
-				asio::transfer_exactly(4),
+			//asio::async_read(socket_,
+			socket_.async_receive(
+				asio::buffer(in_buf),
+				//asio::transfer_exactly(3),
 				[this, self](const error_code& errorCode, std::size_t len) {
 					this->cancel_timeout();
 					if (errorCode || closing_ || len < 3u) {
@@ -130,8 +131,8 @@ namespace network {
 						return;
 					}
 
-					std::istream stream(&read_buffer);
-					stream.read((char *)&in_buf[0], 4);
+					//std::istream stream(&read_buffer);
+					//stream.read((char *)&in_buf[0], 3);
 					if(in_buf[0] != 0x05) {
 						DLOG(ERROR) << __func__ << " version not support.";
 						receiveInProgress_ = false;
@@ -543,7 +544,7 @@ namespace network {
 		bool is_auth, out_auth;
 
 		// I/O Buffers
-		asio::streambuf read_buffer; 
+		//asio::streambuf read_buffer; 
 		std::array<char, 8192> in_buf;
 		std::array<char, 8192> out_buf;
 		std::array<char, 3> req;
