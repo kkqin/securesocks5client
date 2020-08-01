@@ -117,7 +117,7 @@ namespace network {
 			auto self(shared_from_this());
 			asio::async_read(socket_,
 				read_buffer,
-				asio::transfer_exactly(3),
+				asio::transfer_exactly(4),
 				[this, self](const error_code& errorCode, std::size_t len) {
 					this->cancel_timeout();
 					if (errorCode || closing_ || len < 3u) {
@@ -131,7 +131,7 @@ namespace network {
 					}
 
 					std::istream stream(&read_buffer);
-					stream.read((char *)&in_buf[0], 3);
+					stream.read((char *)&in_buf[0], 4);
 					if(in_buf[0] != 0x05) {
 						DLOG(ERROR) << __func__ << " version not support.";
 						receiveInProgress_ = false;
@@ -205,11 +205,11 @@ namespace network {
 
 		void read_request()
 		{
-			std::weak_ptr<Connection> self_weak(shared_from_this());
 			receiveInProgress_ = true;
+			auto self(shared_from_this());
 			socket_.async_receive( 
 				asio::buffer(in_buf),
-				[this, self_weak](const error_code& errorCode, std::size_t len) {
+				[this, self](const error_code& errorCode, std::size_t len) {
 					if (errorCode || closing_) {
 						receiveInProgress_ = false;
 						DLOG(ERROR) << __func__  
