@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.10)
 project(securesockscli VERSION 0.1.0 DESCRIPTION "socks5tls")
 
 set(CMAKE_CXX_STANDARD 17)
-
 set(CMAKE_BUILD_TYPE Debug)
+SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 if(UNIX)
 	find_package(PkgConfig REQUIRED)
