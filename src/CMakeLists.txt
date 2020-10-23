@@ -1,22 +1,22 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 3.10)
+cmake_minimum_required(VERSION 3.10)
 
-PROJECT(securesockscli VERSION 1.0 DESCRIPTION "socks5tls")
+add_library(asio INTERFACE)
+target_include_directories(asio SYSTEM INTERFACE "../asio-1.16.1/include")
 
-find_package(PkgConfig REQUIRED)
+aux_source_directory(. DIR_SRCS)
 
-PKG_CHECK_MODULES(GLOG_STATIC REQUIRED IMPORTED_TARGET libglog)
-PKG_CHECK_MODULES(OPENSSL_STATIC REQUIRED IMPORTED_TARGET openssl)
+add_executable(securecli ${DIR_SRCS})
 
-ADD_LIBRARY(asio INTERFACE)
-TARGET_INCLUDE_DIRECTORIES(asio SYSTEM INTERFACE "../asio-1.16.1/include")
-
-AUX_SOURCE_DIRECTORY(. DIR_SRCS)
-
-ADD_EXECUTABLE(securecli ${DIR_SRCS})
-
-TARGET_LINK_LIBRARIES(securecli 
-	asio
+if(UNIX)
+set(LIB_NEED 
 	PkgConfig::GLOG_STATIC
  	PkgConfig::OPENSSL_STATIC
-	pthread
+	pthread)
+elseif(MSVC)
+set(LIB_NEED glog openssl)
+endif(UNIX)
+
+target_link_libraries(securecli 
+	asio
+	${LIB_NEED}
 )
