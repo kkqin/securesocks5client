@@ -11,15 +11,16 @@
 
 #include <glog/logging.h>
 
-static std::string your_remote_host = "";
-static std::string your_remote_port = "";
+extern int ListenPort;
+extern std::string ConnectPort;
+extern std::string ConnectIP;
 
 namespace network {
 	template <typename Method>
 	class Socks5ConnectionImpl : public Connection
 	{
 	public:
-		Socks5ConnectionImpl(asio::ip::tcp::socket&& socket, 
+		Socks5ConnectionImpl(asio::ip::tcp::socket&& socket,
 					asio::ssl::context&& ctx, int index)
 			: socket_(std::move(socket)),
 			remote_socket_(*IOMgr::instance().netIO().get(), ctx),
@@ -143,8 +144,8 @@ namespace network {
 					uint8_t num_methods = in_buf[1];
 					in_buf[1] = 0xFF;
 					for (uint8_t method = 0; method < num_methods; ++method) {
-						if (in_buf[2 + method] == 0x00) { 
-							in_buf[1] = 0x00; 
+						if (in_buf[2 + method] == 0x00) {
+							in_buf[1] = 0x00;
 							break;
 						}
 
@@ -162,7 +163,7 @@ namespace network {
 
 		void do_auth() {
 			auto self(shared_from_this());
-			socket_.async_receive( 
+			socket_.async_receive(
 				asio::buffer(in_buf),
 				[this, self](const error_code& errorCode, std::size_t len) {
 
@@ -170,7 +171,7 @@ namespace network {
 					closeSocket();
 					return;
 				}
-			
+
 				// default no auth
 				this->is_auth = false;
 				in_buf[1] = 0x00;
@@ -178,7 +179,7 @@ namespace network {
 			});
 		}
 
-		void write_handshake() 
+		void write_handshake()
 		{
 			auto self(shared_from_this());
 			receiveInProgress_ = false;
@@ -186,7 +187,7 @@ namespace network {
 				asio::buffer(in_buf,2),
 				[this, self](const error_code& errorCode, std::size_t len) {
 					if(errorCode) {
-						DLOG(ERROR) << __func__  
+						DLOG(ERROR) << __func__
 									<< ": errorCode: " << errorCode.message();
 						closeSocket();
 						return;
@@ -196,7 +197,7 @@ namespace network {
 						closeSocket();
 						return;
 					}
-				
+
 					if (!this->is_auth)
 						read_request();
 					else
@@ -208,12 +209,12 @@ namespace network {
 		{
 			receiveInProgress_ = true;
 			auto self(shared_from_this());
-			socket_.async_receive( 
+			socket_.async_receive(
 				asio::buffer(in_buf),
 				[this, self](const error_code& errorCode, std::size_t len) {
 					if (errorCode || closing_) {
 						receiveInProgress_ = false;
-						DLOG(ERROR) << __func__  
+						DLOG(ERROR) << __func__
 									<< ": errorCode: " << errorCode.message();
 						closeSocket();
 						return;
@@ -221,7 +222,7 @@ namespace network {
 
 					if (len < 5 || in_buf[0] != 0x05 || in_buf[1] != 0x01) {
 						receiveInProgress_ = false;
-						DLOG(ERROR) << __func__ 
+						DLOG(ERROR) << __func__
 									<< " :socks conect requset invaild.";
 						closeSocket();
 						return;
@@ -261,7 +262,7 @@ namespace network {
 					return true;
 				});
 
-			resolver.async_resolve(asio::ip::tcp::resolver::query({ your_remote_host, your_remote_port }),
+			resolver.async_resolve(asio::ip::tcp::resolver::query({ ConnectIP, ConnectPort }),
 			[this, self_weak](const error_code& errorCode, asio::ip::tcp::resolver::iterator it) {
 				if (errorCode) {
 					DLOG(ERROR) << "resolve "<< remote_host_ << " error. code:" << errorCode.message();
@@ -269,7 +270,7 @@ namespace network {
 					return;
 				}
 
-				do_remote_ssl_socks_connect(it); 
+				do_remote_ssl_socks_connect(it);
 			});
 		}
 
@@ -279,12 +280,12 @@ namespace network {
 				[this, self_weak](const error_code& errorCode) {
 				if(errorCode) {
 					DLOG(ERROR) << "connect ssl error:"<< errorCode.message();
-					closeSocket();	
+					closeSocket();
 					return;
 				}
 
 				do_handshake();
-				});	
+				});
 		}
 
 		void do_handshake() {
@@ -293,7 +294,7 @@ namespace network {
 				[this, self_weak](const error_code& errorCode) {
 				if(errorCode) {
 					DLOG(ERROR) << "handshake ssl error:"<< errorCode.message();
-					closeSocket();	
+					closeSocket();
 					return;
 				}
 
@@ -303,7 +304,7 @@ namespace network {
 
 		void do_client_socks5() {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
-			// request remote ssl socks 
+			// request remote ssl socks
 			req[0] = 0x05;
 			req[1] = 0x01;
 			req[2] = 0x02; //auth
@@ -318,7 +319,7 @@ namespace network {
 					return;
 				}
 
-				read_response_server(); 
+				read_response_server();
 			});
 		}
 
@@ -328,11 +329,11 @@ namespace network {
 				[this,self_weak](const error_code& errorCode, std::size_t len) {
 				if(errorCode || req[1] != 0x02) {
 					DLOG(ERROR) << errorCode.message() << " req:" << req[1];
-					closeSocket();	
+					closeSocket();
 					return;
 				}
-			
-				passing_auth();	
+
+				passing_auth();
 			});
 		}
 
@@ -340,11 +341,11 @@ namespace network {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
 			std::string uname{"letus"};
 			std::string pwd{"bebrave"};
-			
+
 			std::size_t length = (1 + 1 + uname.length() + 1 + pwd.length());
 			std::uint8_t* st = (std::uint8_t*)malloc(length * sizeof(char));
 			st[0] = 0x05;
-			st[1] = uname.length(); 
+			st[1] = uname.length();
 			memcpy(st + 1 + 1, uname.c_str(), uname.length());
 			st[1 + 1 + uname.length()] = pwd.length();
 			memcpy(st + 1 + 1 + uname.length() + 1, pwd.c_str(), pwd.length() + 1);
@@ -361,13 +362,13 @@ namespace network {
 				remote_socket_.async_read_some(asio::buffer(req),
 						[this, self_weak](const error_code& errorCode, std::size_t len) {
 						if(errorCode || req[1] != 0x00) {
-							DLOG(ERROR) << "error:" << errorCode.message() 
+							DLOG(ERROR) << "error:" << errorCode.message()
 								<< " req:" << std::to_string(req[1]) ;
-							closeSocket();	
+							closeSocket();
 							return;
 						}
 
-						write_remote_socks5();	
+						write_remote_socks5();
 					});
 			});
 		}
@@ -381,7 +382,7 @@ namespace network {
 				if(errorCode){
 					DLOG(ERROR) << "error:" << errorCode.message();
 					closeSocket();
-					return;			
+					return;
 				}
 
 				read_remote_socks5();
@@ -398,7 +399,7 @@ namespace network {
 					closeSocket();
 					return;
 				}
-			
+
 				write_local_socks5();
 			});
 		}
@@ -544,14 +545,14 @@ namespace network {
 		bool is_auth, out_auth;
 
 		// I/O Buffers
-		//asio::streambuf read_buffer; 
+		//asio::streambuf read_buffer;
 		std::array<char, 8192> in_buf;
 		std::array<char, 8192> out_buf;
 		std::array<char, 3> req;
 		std::string remote_host_;
 		std::string remote_port_;
 		asio::ip::tcp::resolver resolver;
-		
+
 		int trans_len;
 		int id;
 		long long total_upload;
@@ -559,4 +560,4 @@ namespace network {
 	};
 }
 
-#endif 
+#endif
