@@ -214,6 +214,7 @@ static bool save_pidfile()
 
 int main(int argc, char *argv[])
 {
+	parseFile();
 	if(runAsDaemon) {
 		init_daemon();
 		parent_daemon();
@@ -222,7 +223,6 @@ int main(int argc, char *argv[])
 	printf("-----------------------------------------power by: kk\n");
 
 	init_log();
-	parseFile();
 
 	// Create io_service
 	auto io_service = network::IOMgr::instance().netIO();
