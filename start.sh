@@ -7,8 +7,8 @@ if [ ! -f start.sh ]; then
     exit 1
 fi
 
-if [ ! -f gamesvr ]; then
-    echo "ERROR: gamesvr file not exist!" 1>&2
+if [ ! -f securecli ]; then
+    echo "ERROR: securecli file not exist!" 1>&2
     exit 1
 fi
 
@@ -20,7 +20,7 @@ fi
 rm -rf pid
 
 chmod 0755 ./*.sh
-chmod 0755 ./gamesvr
+chmod 0755 ./securecli
 
-`pwd`/gamesvr -d 2>> notice.log &
+`pwd`/securecli -d 2>> notice.log &
 
