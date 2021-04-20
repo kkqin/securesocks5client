@@ -42,12 +42,18 @@ std::string ConnectIP;
 bool runAsDaemon = false;
 
 void parseFile() {
+#ifndef WIN32
 	auto config = ConfigParser::parseFile("./server.cfg");
+#else
+	auto config = ConfigParser::parseFile(".\\server.cfg");
+#endif
 	ListenPort = config.getInteger("base", "listen_port", 10801);
 	ConnectPort = config.getString("base", "connect_port", "1080");
 	ConnectIP = config.getString("base", "connect_ip", "127.0.0.1");
 	runAsDaemon = config.getBoolean("base", "runDaemon", false);
 }
+
+#ifndef WIN32
 
 static int init_daemon()
 {
@@ -212,18 +218,24 @@ static bool save_pidfile()
   return true;
 }
 
+#endif
+
 int main(int argc, char *argv[])
 {
 	parseFile();
+#ifndef WIN32
 	if(runAsDaemon) {
 		init_daemon();
 		parent_daemon();
 	}
 	save_pidfile();
+#endif
 	printf("-----------------------------------------power by: kk\n");
 
 	init_log();
-
+	printf("-----------------------------------------Listen Port: %d\n", ListenPort);                                                                              
+	printf("-----------------------------------------Connect Port: %s\n", ConnectPort.c_str());                                                                    
+	printf("-----------------------------------------Connect ip: %s\n", ConnectIP.c_str());  
 	// Create io_service
 	auto io_service = network::IOMgr::instance().netIO();
 	auto onClient = std::bind(&network::Process::onRecvGameMsg, std::move(network::Process()), std::placeholders::_1);
