@@ -34,6 +34,15 @@ namespace network {
 			total_download(0)
 		{
 			method_ = std::make_shared<Method>();
+			std::string uname{"letus"};
+			std::string pwd{"bebrave"};
+			authLength = (1 + 1 + uname.length() + 1 + pwd.length());
+			st = (std::uint8_t*)malloc(authLength * sizeof(char));
+			st[0] = 0x05;
+			st[1] = uname.length();
+			memcpy(st + 1 + 1, uname.c_str(), uname.length());
+			st[1 + 1 + uname.length()] = pwd.length();
+			memcpy(st + 1 + 1 + uname.length() + 1, pwd.c_str(), pwd.length() + 1);
 		}
 
 		virtual ~Socks5ConnectionImpl()
@@ -116,11 +125,9 @@ namespace network {
 			this->set_timeout(method_->timeout());
 			receiveInProgress_ = true;
 			auto self(shared_from_this());
-			//asio::async_read(socket_,
 			socket_.async_receive(
 				asio::buffer(in_buf),
-				//asio::transfer_exactly(3),
-				[this, self](const error_code& errorCode, std::size_t len) {
+				[this](const error_code& errorCode, std::size_t len) {
 					this->cancel_timeout();
 					if (errorCode || closing_ || len < 3u) {
 						DLOG(ERROR) << __func__
@@ -132,9 +139,7 @@ namespace network {
 						return;
 					}
 
-					//std::istream stream(&read_buffer);
-					//stream.read((char *)&in_buf[0], 3);
-					if(in_buf[0] != 0x05) {
+					if (in_buf[0] != 0x05) {
 						DLOG(ERROR) << __func__ << " version not support.";
 						receiveInProgress_ = false;
 						closeSocket();
@@ -149,7 +154,7 @@ namespace network {
 							break;
 						}
 
-						if(in_buf[2 + method] == 0x02) {
+						if (in_buf[2 + method] == 0x02) {
 							in_buf[1] = 0x02;
 							is_auth = true;
 							break;
@@ -157,8 +162,7 @@ namespace network {
 					}
 
 					write_handshake();
-				}
-			);
+			});
 		}
 
 		void do_auth() {
@@ -339,26 +343,15 @@ namespace network {
 
 		void passing_auth() {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
-			std::string uname{"letus"};
-			std::string pwd{"bebrave"};
-
-			std::size_t length = (1 + 1 + uname.length() + 1 + pwd.length());
-			std::uint8_t* st = (std::uint8_t*)malloc(length * sizeof(char));
-			st[0] = 0x05;
-			st[1] = uname.length();
-			memcpy(st + 1 + 1, uname.c_str(), uname.length());
-			st[1 + 1 + uname.length()] = pwd.length();
-			memcpy(st + 1 + 1 + uname.length() + 1, pwd.c_str(), pwd.length() + 1);
 			asio::async_write(remote_socket_,
-				asio::buffer(st, length),
-				[this, st, self_weak](const error_code& errorCode, std::size_t len){
+				asio::buffer(st, authLength),
+				[this, self_weak](const error_code& errorCode, std::size_t len){
 				if(errorCode) {
 					DLOG(ERROR) << "error:" << errorCode.message();
 					closeSocket();
 					return;
 				}
 
-				free(st);
 				remote_socket_.async_read_some(asio::buffer(req),
 						[this, self_weak](const error_code& errorCode, std::size_t len) {
 						if(errorCode || req[1] != 0x00) {
@@ -545,13 +538,15 @@ namespace network {
 		bool is_auth, out_auth;
 
 		// I/O Buffers
-		//asio::streambuf read_buffer;
+		char* reuse_buf;
 		std::array<char, 8192> in_buf;
 		std::array<char, 8192> out_buf;
 		std::array<char, 3> req;
 		std::string remote_host_;
 		std::string remote_port_;
 		asio::ip::tcp::resolver resolver;
+		std::uint8_t* st;
+		std::size_t authLength;
 
 		int trans_len;
 		int id;
