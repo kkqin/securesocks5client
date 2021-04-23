@@ -49,6 +49,7 @@ namespace network {
 		{
 			DLOG(WARNING) << __func__ << " dead " << "index: "<< id ;
 			DLOG(WARNING) << "upload bytes:" << total_upload << " download bytes:" << total_download;
+			free(st);
 			method_.reset();
 			DLOG(WARNING) << __func__
 				<< ": called with closing_:" << (closing_ ? "true" : "false")
