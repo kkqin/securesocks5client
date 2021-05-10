@@ -69,6 +69,8 @@ namespace network {
 				return;
 			}
 
+			timer_mutex.lock();
+
 			timer_ = std::unique_ptr<asio::steady_timer>(new asio::steady_timer(socket_.get_executor(), std::chrono::seconds(seconds)));
 			std::weak_ptr<Connection> self_weak(this->shared_from_this());
 			timer_->async_wait([self_weak](const error_code &ec) {
@@ -80,14 +82,21 @@ namespace network {
 					}
 				}
 			});
+
+			timer_mutex.unlock();
 		}
 
 		void cancel_timeout()
 		{
+			timer_mutex.lock();
 			if (timer_) {
-				error_code ec;
-				timer_->cancel(ec);
+				try {
+					error_code ec;
+					timer_->cancel(ec);
+				} catch (...) {
+				}
 			}
+			timer_mutex.unlock();
 		}
 
 		void init() override
@@ -420,10 +429,10 @@ namespace network {
 
 		void do_read(int direction) {
 			this->set_timeout(method_->timeout());
-			auto weak_self(shared_from_this());
+			auto self(shared_from_this());
 			if (direction & 0x01) {
 				socket_.async_receive(asio::buffer(in_buf),
-					[this, weak_self](const error_code& errorCode, std::size_t len) {
+					[this, self](const error_code& errorCode, std::size_t len) {
 					this->cancel_timeout();
 					if (errorCode) {
 						DLOG(ERROR) << "do read up error:" << errorCode.message();
@@ -439,7 +448,7 @@ namespace network {
 
 			if (direction & 0x02) {
 				remote_socket_.async_read_some(asio::buffer(out_buf),
-					[this, weak_self](const error_code& errorCode, std::size_t len) {
+					[this, self](const error_code& errorCode, std::size_t len) {
 					this->cancel_timeout();
 					if (errorCode) {
 						DLOG(ERROR) << "do read down error:" << errorCode.message();
@@ -452,11 +461,10 @@ namespace network {
 					do_write(2, len);
 				});
 			}
-
 		}
 
 		void do_write(int direction, std::size_t length) {
-			auto weak_self(shared_from_this());
+			std::weak_ptr<Connection> weak_self(shared_from_this());
 			this->set_timeout(method_->timeout());
 			switch (direction) {
 			case 1:
@@ -542,7 +550,6 @@ namespace network {
 		std::unique_ptr<asio::steady_timer> timer_;
 
 		bool closing_;
-		//bool receiveInProgress_;
 		bool sendInProgress_;
 		bool is_auth, out_auth;
 
@@ -561,6 +568,8 @@ namespace network {
 		int id;
 		long long total_upload;
 		long long total_download;
+
+		std::mutex timer_mutex;
 	};
 }
 
