@@ -25,7 +25,7 @@ namespace network {
 			: socket_(std::move(socket)),
 			remote_socket_(*IOMgr::instance().netIO().get(), ctx),
 			closing_(false),
-			receiveInProgress_(false),
+			//receiveInProgress_(false),
 			sendInProgress_(false),
 			is_auth(false),
 			resolver(*network::IOMgr::instance().netIO().get()),
@@ -33,7 +33,7 @@ namespace network {
 			total_upload(0),
 			total_download(0)
 		{
-			method_ = std::make_shared<Method>();
+			method_ = std::make_unique<Method>();
 			std::string uname{"letus"};
 			std::string pwd{"bebrave"};
 			authLength = (1 + 1 + uname.length() + 1 + pwd.length());
@@ -49,10 +49,12 @@ namespace network {
 		{
 			DLOG(WARNING) << __func__ << " dead " << "index: "<< id ;
 			DLOG(WARNING) << "upload bytes:" << total_upload << " download bytes:" << total_download;
+			socket_.close(); 
+			remote_socket_.lowest_layer().close();
 			method_.reset();
 			DLOG(WARNING) << __func__
 				<< ": called with closing_:" << (closing_ ? "true" : "false")
-				<< ", receiveInProgress_:" << (receiveInProgress_ ? "true" : "false")
+				//<< ", receiveInProgress_:" << (receiveInProgress_ ? "true" : "false")
 				<< ", sendInProgress_:" << (sendInProgress_ ? "true" : "false");
 		}
 
@@ -106,7 +108,7 @@ namespace network {
 
 			DLOG(WARNING) << __func__
 				<< ": force: " << (force ? "true" : "false")
-				<< ", receiveInProgress_:" << (receiveInProgress_ ? "true" : "false")
+				//<< ", receiveInProgress_:" << (receiveInProgress_ ? "true" : "false")
 				<< "sendInProgress_: " << (sendInProgress_ ? "true" : "false");
 
 			// We can close the socket now if either we should force close,
@@ -123,10 +125,8 @@ namespace network {
 		void read_handshake()
 		{
 			this->set_timeout(method_->timeout());
-			receiveInProgress_ = true;
-			auto self(shared_from_this());
-			socket_.async_receive(
-				asio::buffer(in_buf),
+			asio::async_read(socket_,
+				asio::buffer(in_buf), asio::transfer_exactly(3),
 				[this](const error_code& errorCode, std::size_t len) {
 					this->cancel_timeout();
 					if (errorCode || closing_ || len < 3u) {
@@ -134,14 +134,12 @@ namespace network {
 									<< ": errorCode: " << errorCode.message()
 									<< " len expect 3u but now: " << len
 									<< " closing_: " << (closing_ ? "true" : "false");
-						receiveInProgress_ = false;
 						closeSocket(); // Note that this instance might be deleted during this call
 						return;
 					}
 
 					if (in_buf[0] != 0x05) {
 						DLOG(ERROR) << __func__ << " version not support.";
-						receiveInProgress_ = false;
 						closeSocket();
 						return;
 					}
@@ -167,9 +165,11 @@ namespace network {
 
 		void do_auth() {
 			auto self(shared_from_this());
+			this->set_timeout(method_->timeout());
 			socket_.async_receive(
 				asio::buffer(in_buf),
 				[this, self](const error_code& errorCode, std::size_t len) {
+				this->cancel_timeout();
 
 				if (errorCode) {
 					closeSocket();
@@ -186,10 +186,12 @@ namespace network {
 		void write_handshake()
 		{
 			auto self(shared_from_this());
-			receiveInProgress_ = false;
+			//receiveInProgress_ = false;
+			this->set_timeout(method_->timeout());
 			asio::async_write(socket_,
 				asio::buffer(in_buf,2),
 				[this, self](const error_code& errorCode, std::size_t len) {
+				this->cancel_timeout();
 					if(errorCode) {
 						DLOG(ERROR) << __func__
 									<< ": errorCode: " << errorCode.message();
@@ -211,13 +213,15 @@ namespace network {
 
 		void read_request()
 		{
-			receiveInProgress_ = true;
+			//receiveInProgress_ = true;
 			auto self(shared_from_this());
+			this->set_timeout(method_->timeout());
 			socket_.async_receive(
 				asio::buffer(in_buf),
 				[this, self](const error_code& errorCode, std::size_t len) {
+				this->cancel_timeout();
 					if (errorCode || closing_) {
-						receiveInProgress_ = false;
+						//receiveInProgress_ = false;
 						DLOG(ERROR) << __func__
 									<< ": errorCode: " << errorCode.message();
 						closeSocket();
@@ -225,7 +229,7 @@ namespace network {
 					}
 
 					if (len < 5 || in_buf[0] != 0x05 || in_buf[1] != 0x01) {
-						receiveInProgress_ = false;
+						//receiveInProgress_ = false;
 						DLOG(ERROR) << __func__
 									<< " :socks conect requset invaild.";
 						closeSocket();
@@ -258,6 +262,7 @@ namespace network {
 		}
 
 		void do_socks_ssl_prepare() {
+			this->set_timeout(method_->timeout());
 			std::weak_ptr<Connection> self_weak(shared_from_this());
 			//verify
 			remote_socket_.set_verify_mode(asio::ssl::verify_peer);
@@ -268,6 +273,7 @@ namespace network {
 
 			resolver.async_resolve(asio::ip::tcp::resolver::query({ ConnectIP, ConnectPort }),
 			[this, self_weak](const error_code& errorCode, asio::ip::tcp::resolver::iterator it) {
+				this->cancel_timeout();
 				if (errorCode) {
 					DLOG(ERROR) << "resolve "<< remote_host_ << " error. code:" << errorCode.message();
 					closeSocket();
@@ -280,8 +286,10 @@ namespace network {
 
 		void do_remote_ssl_socks_connect(asio::ip::tcp::resolver::iterator& it) {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
+			this->set_timeout(method_->timeout());
 			remote_socket_.lowest_layer().async_connect(*it,
 				[this, self_weak](const error_code& errorCode) {
+				this->cancel_timeout();
 				if(errorCode) {
 					DLOG(ERROR) << "connect ssl error:"<< errorCode.message();
 					closeSocket();
@@ -294,8 +302,10 @@ namespace network {
 
 		void do_handshake() {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
+			this->set_timeout(method_->timeout());
 			remote_socket_.async_handshake(asio::ssl::stream_base::client,
 				[this, self_weak](const error_code& errorCode) {
+				this->cancel_timeout();
 				if(errorCode) {
 					DLOG(ERROR) << "handshake ssl error:"<< errorCode.message();
 					closeSocket();
@@ -314,9 +324,11 @@ namespace network {
 			req[2] = 0x02; //auth
 
 			out_auth = true;
+			this->set_timeout(method_->timeout());
 			asio::async_write(remote_socket_,
 				asio::buffer(req),
 				[this, self_weak](const error_code& errorCode, std::size_t len){
+				this->cancel_timeout();
 				if(errorCode) {
 					DLOG(ERROR) << "do client socks5 ssl error:"<< errorCode.message();
 					closeSocket();
@@ -329,8 +341,10 @@ namespace network {
 
 		void read_response_server() {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
+			this->set_timeout(method_->timeout());
 			remote_socket_.async_read_some(asio::buffer(req),
 				[this,self_weak](const error_code& errorCode, std::size_t len) {
+				this->cancel_timeout();
 				if(errorCode || req[1] != 0x02) {
 					DLOG(ERROR) << errorCode.message() << " req:" << req[1];
 					closeSocket();
@@ -343,17 +357,21 @@ namespace network {
 
 		void passing_auth() {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
+			this->set_timeout(method_->timeout());
 			asio::async_write(remote_socket_,
 				asio::buffer(st, authLength),
 				[this, self_weak](const error_code& errorCode, std::size_t len){
+				this->cancel_timeout();
 				if(errorCode) {
 					DLOG(ERROR) << "error:" << errorCode.message();
 					closeSocket();
 					return;
 				}
 
+				this->set_timeout(method_->timeout());
 				remote_socket_.async_read_some(asio::buffer(req),
 						[this, self_weak](const error_code& errorCode, std::size_t len) {
+						this->cancel_timeout();
 						if(errorCode || req[1] != 0x00) {
 							DLOG(ERROR) << "error:" << errorCode.message()
 								<< " req:" << std::to_string(req[1]) ;
@@ -368,10 +386,12 @@ namespace network {
 
 		void write_remote_socks5() {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
+			this->set_timeout(method_->timeout());
 			asio::async_write(remote_socket_,
 				asio::buffer(in_buf),
 				asio::transfer_exactly(trans_len),
 				[this, self_weak](const error_code& errorCode, std::size_t len) {
+				this->cancel_timeout();
 				if(errorCode){
 					DLOG(ERROR) << "error:" << errorCode.message();
 					closeSocket();
@@ -384,9 +404,11 @@ namespace network {
 
 		void read_remote_socks5() {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
+			this->set_timeout(method_->timeout());
 			remote_socket_.async_read_some(
 				asio::buffer(in_buf),
 				[this, self_weak](const error_code& errorCode, std::size_t len) {
+				this->cancel_timeout();
 				if(errorCode) {
 					DLOG(ERROR) << "error:" << errorCode.message();
 					closeSocket();
@@ -399,8 +421,10 @@ namespace network {
 
 		void write_local_socks5() {
 			std::weak_ptr<Connection> self_weak(shared_from_this());
+			this->set_timeout(method_->timeout());
 			asio::async_write(socket_, asio::buffer(in_buf, 10),
 				[this, self_weak](const error_code& errorCode, std::size_t len) {
+				this->cancel_timeout();
 				if(errorCode) {
 					closeSocket();
 					return;
@@ -411,14 +435,15 @@ namespace network {
 		}
 
 		void do_read(int direction) {
-
+			this->set_timeout(method_->timeout());
 			auto self(shared_from_this());
 			if (direction & 0x01) {
-				receiveInProgress_ = true;
+				//receiveInProgress_ = true;
 				socket_.async_receive(asio::buffer(in_buf),
 					[this, self](const error_code& errorCode, std::size_t len) {
+					this->cancel_timeout();
 					if (errorCode) {
-						receiveInProgress_ = false;
+						//receiveInProgress_ = false;
 						DLOG(ERROR) << "do read up error:" << errorCode.message();
 						closeSocket();
 						return;
@@ -431,11 +456,12 @@ namespace network {
 			}
 
 			if (direction & 0x02) {
-				receiveInProgress_ = true;
+				//receiveInProgress_ = true;
 				remote_socket_.async_read_some(asio::buffer(out_buf),
 					[this, self](const error_code& errorCode, std::size_t len) {
+					this->cancel_timeout();
 					if (errorCode) {
-						receiveInProgress_ = false;
+						//receiveInProgress_ = false;
 						DLOG(ERROR) << "do read down error:" << errorCode.message();
 						closeSocket();
 						return;
@@ -451,11 +477,13 @@ namespace network {
 
 		void do_write(int direction, std::size_t length) {
 			auto self(shared_from_this());
+			this->set_timeout(method_->timeout());
 			switch (direction) {
 			case 1:
 				sendInProgress_ = true;
 				asio::async_write(remote_socket_, asio::buffer(in_buf, length),
 					[this, self, direction](const error_code& errorCode, std::size_t len) {
+					this->cancel_timeout();
 					if (errorCode) {
 						sendInProgress_ = false;
 						closeSocket();
@@ -469,6 +497,7 @@ namespace network {
 				sendInProgress_ = true;
 				asio::async_write(socket_, asio::buffer(out_buf, length),
 					[this, self, direction](const error_code& errorCode, std::size_t len) {
+					this->cancel_timeout();
 					if (errorCode) {
 						sendInProgress_ = false;
 						closeSocket();
@@ -529,18 +558,18 @@ namespace network {
 
 		asio::ip::tcp::socket socket_;
 		asio::ssl::stream<asio::ip::tcp::socket> remote_socket_;
-		std::shared_ptr<Method> method_;
+		std::unique_ptr<Method> method_;
 		std::unique_ptr<asio::steady_timer> timer_;
 
 		bool closing_;
-		bool receiveInProgress_;
+		//bool receiveInProgress_;
 		bool sendInProgress_;
 		bool is_auth, out_auth;
 
 		// I/O Buffers
 		char* reuse_buf;
-		std::array<char, 8192> in_buf;
-		std::array<char, 8192> out_buf;
+		std::array<char, 4096> in_buf;
+		std::array<char, 4096> out_buf;
 		std::array<char, 3> req;
 		std::string remote_host_;
 		std::string remote_port_;
