@@ -34,15 +34,6 @@ namespace network {
 			total_download(0)
 		{
 			method_ = std::make_unique<Method>();
-			std::string uname{"letus"};
-			std::string pwd{"bebrave"};
-			authLength = (1 + 1 + uname.length() + 1 + pwd.length());
-			st = (std::uint8_t*)malloc(authLength * sizeof(char));
-			st[0] = 0x05;
-			st[1] = uname.length();
-			memcpy(st + 1 + 1, uname.c_str(), uname.length());
-			st[1 + 1 + uname.length()] = pwd.length();
-			memcpy(st + 1 + 1 + uname.length() + 1, pwd.c_str(), pwd.length() + 1);
 		}
 
 		virtual ~Socks5ConnectionImpl()
@@ -69,8 +60,6 @@ namespace network {
 				return;
 			}
 
-			timer_mutex.lock();
-
 			timer_ = std::unique_ptr<asio::steady_timer>(new asio::steady_timer(socket_.get_executor(), std::chrono::seconds(seconds)));
 			std::weak_ptr<Connection> self_weak(this->shared_from_this());
 			timer_->async_wait([self_weak](const error_code &ec) {
@@ -82,13 +71,10 @@ namespace network {
 					}
 				}
 			});
-
-			timer_mutex.unlock();
 		}
 
 		void cancel_timeout()
 		{
-			timer_mutex.lock();
 			if (timer_) {
 				try {
 					error_code ec;
@@ -96,7 +82,6 @@ namespace network {
 				} catch (...) {
 				}
 			}
-			timer_mutex.unlock();
 		}
 
 		void init() override
@@ -353,10 +338,19 @@ namespace network {
 		}
 
 		void passing_auth() {
+			std::string uname{"letus"};
+			std::string pwd{"bebrave"};
+			authLength = (1 + 1 + uname.length() + 1 + pwd.length());
+			uint8_t* st = (std::uint8_t*)malloc(authLength * sizeof(char));
+			st[0] = 0x05;
+			st[1] = uname.length();
+			memcpy(st + 1 + 1, uname.c_str(), uname.length());
+			st[1 + 1 + uname.length()] = pwd.length();
+			memcpy(st + 1 + 1 + uname.length() + 1, pwd.c_str(), pwd.length() + 1);
 			this->set_timeout(method_->timeout());
 			asio::async_write(remote_socket_,
 				asio::buffer(st, authLength),
-				[this](const error_code& errorCode, std::size_t len){
+				[this, st](const error_code& errorCode, std::size_t len){
 				this->cancel_timeout();
 				if(errorCode) {
 					DLOG(ERROR) << "error:" << errorCode.message();
@@ -428,12 +422,10 @@ namespace network {
 		}
 
 		void do_read(int direction) {
-			this->set_timeout(method_->timeout());
 			auto self(shared_from_this());
 			if (direction & 0x01) {
-				socket_.async_receive(asio::buffer(in_buf),
+				asio::async_read(socket_, asio::buffer(in_buf), asio::transfer_at_least(1),
 					[this, self](const error_code& errorCode, std::size_t len) {
-					this->cancel_timeout();
 					if (errorCode) {
 						DLOG(ERROR) << "do read up error:" << errorCode.message();
 						closeSocket();
@@ -447,7 +439,7 @@ namespace network {
 			}
 
 			if (direction & 0x02) {
-				remote_socket_.async_read_some(asio::buffer(out_buf),
+				asio::async_read(remote_socket_, asio::buffer(out_buf), asio::transfer_at_least(1),
 					[this, self](const error_code& errorCode, std::size_t len) {
 					this->cancel_timeout();
 					if (errorCode) {
@@ -464,16 +456,13 @@ namespace network {
 		}
 
 		void do_write(int direction, std::size_t length) {
-			std::weak_ptr<Connection> weak_self(shared_from_this());
-			this->set_timeout(method_->timeout());
+			auto self(shared_from_this());
 			switch (direction) {
 			case 1:
 				sendInProgress_ = true;
 				asio::async_write(remote_socket_, asio::buffer(in_buf, length),
-					[this, weak_self, direction](const error_code& errorCode, std::size_t len) {
-					this->cancel_timeout();
+					[this, self, direction](const error_code& errorCode, std::size_t len) {
 					if (errorCode) {
-						sendInProgress_ = false;
 						closeSocket();
 						return;
 					}
@@ -484,10 +473,8 @@ namespace network {
 			case 2:
 				sendInProgress_ = true;
 				asio::async_write(socket_, asio::buffer(out_buf, length),
-					[this, weak_self, direction](const error_code& errorCode, std::size_t len) {
-					this->cancel_timeout();
+					[this, self, direction](const error_code& errorCode, std::size_t len) {
 					if (errorCode) {
-						sendInProgress_ = false;
 						closeSocket();
 						return;
 					}
@@ -561,7 +548,6 @@ namespace network {
 		std::string remote_host_;
 		std::string remote_port_;
 		asio::ip::tcp::resolver resolver;
-		std::uint8_t* st;
 		std::size_t authLength;
 
 		int trans_len;
@@ -569,7 +555,7 @@ namespace network {
 		long long total_upload;
 		long long total_download;
 
-		std::mutex timer_mutex;
+		std::mutex mutex_;
 	};
 }
 
