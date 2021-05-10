@@ -525,7 +525,7 @@ namespace network {
 			//if ((!receiveInProgress_ && !sendInProgress_) || (receiveInProgress_ && sendInProgress_))
 			{
 				socket_.close(); remote_socket_.lowest_layer().close();
-				DLOG(INFO) << "index: " << id;
+				DLOG(WARNING) << "index: " << id << " dying.";
 				// Time to delete this instance
 				method_->onDisconnected();
 			}
