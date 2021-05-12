@@ -487,12 +487,13 @@ namespace network {
 		void closeSocket()
 		{
 			error_code error;
-
 			socket_.lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_type::shutdown_both, error);
 			socket_.lowest_layer().close(error);
 			remote_socket_.lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_type::shutdown_both, error);
 			remote_socket_.lowest_layer().close(error);
-			DLOG(WARNING) << "index: " << id << " dying.";
+			DLOG(WARNING) << "index: " << id << " dying..." ;
+			socket_.close();
+			remote_socket_.lowest_layer().close();
 			// Time to delete this instance
 			method_->onDisconnected();
 		}
