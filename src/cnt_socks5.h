@@ -25,8 +25,6 @@ namespace network {
 			: socket_(std::move(socket)),
 			remote_socket_(*IOMgr::instance().netIO().get(), ctx),
 			closing_(false),
-			//receiveInProgress_(false),
-			sendInProgress_(false),
 			is_auth(false),
 			resolver(*network::IOMgr::instance().netIO().get()),
 			id(index),
@@ -38,15 +36,13 @@ namespace network {
 
 		virtual ~Socks5ConnectionImpl()
 		{
-			DLOG(WARNING) << __func__ << " dead " << "index: "<< id ;
+			/*DLOG(WARNING) << __func__ << " dead " << "index: "<< id ;
 			DLOG(WARNING) << "upload bytes:" << total_upload << " download bytes:" << total_download;
 			socket_.close(); 
 			remote_socket_.lowest_layer().close();
 			method_.reset();
 			DLOG(WARNING) << __func__
-				<< ": called with closing_:" << (closing_ ? "true" : "false")
-				//<< ", receiveInProgress_:" << (receiveInProgress_ ? "true" : "false")
-				<< ", sendInProgress_:" << (sendInProgress_ ? "true" : "false");
+				<< ": called with closing_:" << (closing_ ? "true" : "false");*/
 		}
 
 		// Delete copy constructors
@@ -92,22 +88,20 @@ namespace network {
 
 		void close(bool force) override
 		{
-			if (closing_)
+			/*if (closing_)
 			{
 				DLOG(WARNING) << __func__ << "called with shutdown_: true";
-				return;
+				//return;
 			}
 
 			closing_ = true;
 
 			DLOG(WARNING) << __func__
-				<< ": force: " << (force ? "true" : "false")
-				//<< ", receiveInProgress_:" << (receiveInProgress_ ? "true" : "false")
-				<< "sendInProgress_: " << (sendInProgress_ ? "true" : "false");
+				<< ": force: " << (force ? "true" : "false");*/
 
 			// We can close the socket now if either we should force close,
 			// or if there are no send in progress (i.e. no queued packets)
-			if (force || !sendInProgress_)
+			if (force)
 			{
 				closeSocket();  // Note that this instance might be deleted during this call
 			}
@@ -301,6 +295,7 @@ namespace network {
 		}
 
 		void do_client_socks5() {
+			auto self(shared_from_this());
 			// request remote ssl socks
 			req[0] = 0x05;
 			req[1] = 0x01;
@@ -310,7 +305,7 @@ namespace network {
 			this->set_timeout(method_->timeout());
 			asio::async_write(remote_socket_,
 				asio::buffer(req),
-				[this](const error_code& errorCode, std::size_t len){
+				[this, self](const error_code& errorCode, std::size_t len){
 				this->cancel_timeout();
 				if(errorCode) {
 					DLOG(ERROR) << "do client socks5 ssl error:"<< errorCode.message();
@@ -323,9 +318,10 @@ namespace network {
 		}
 
 		void read_response_server() {
+			auto self(shared_from_this());
 			this->set_timeout(method_->timeout());
 			remote_socket_.async_read_some(asio::buffer(req),
-				[this](const error_code& errorCode, std::size_t len) {
+				[this, self](const error_code& errorCode, std::size_t len) {
 				this->cancel_timeout();
 				if(errorCode || req[1] != 0x02) {
 					DLOG(ERROR) << errorCode.message() << " req:" << req[1];
@@ -338,6 +334,7 @@ namespace network {
 		}
 
 		void passing_auth() {
+			auto self(shared_from_this());
 			std::string uname{"letus"};
 			std::string pwd{"bebrave"};
 			authLength = (1 + 1 + uname.length() + 1 + pwd.length());
@@ -350,7 +347,7 @@ namespace network {
 			this->set_timeout(method_->timeout());
 			asio::async_write(remote_socket_,
 				asio::buffer(st, authLength),
-				[this, st](const error_code& errorCode, std::size_t len){
+				[this, st, self](const error_code& errorCode, std::size_t len){
 				this->cancel_timeout();
 				if(errorCode) {
 					DLOG(ERROR) << "error:" << errorCode.message();
@@ -360,7 +357,7 @@ namespace network {
 
 				this->set_timeout(method_->timeout());
 				remote_socket_.async_read_some(asio::buffer(req),
-						[this](const error_code& errorCode, std::size_t len) {
+						[this, self](const error_code& errorCode, std::size_t len) {
 						this->cancel_timeout();
 						if(errorCode || req[1] != 0x00) {
 							DLOG(ERROR) << "error:" << errorCode.message()
@@ -375,11 +372,12 @@ namespace network {
 		}
 
 		void write_remote_socks5() {
+			auto self(shared_from_this());
 			this->set_timeout(method_->timeout());
 			asio::async_write(remote_socket_,
 				asio::buffer(in_buf),
 				asio::transfer_exactly(trans_len),
-				[this](const error_code& errorCode, std::size_t len) {
+				[this, self](const error_code& errorCode, std::size_t len) {
 				this->cancel_timeout();
 				if(errorCode){
 					DLOG(ERROR) << "error:" << errorCode.message();
@@ -392,10 +390,11 @@ namespace network {
 		}
 
 		void read_remote_socks5() {
+			auto self(shared_from_this());
 			this->set_timeout(method_->timeout());
 			remote_socket_.async_read_some(
 				asio::buffer(in_buf),
-				[this](const error_code& errorCode, std::size_t len) {
+				[this, self](const error_code& errorCode, std::size_t len) {
 				this->cancel_timeout();
 				if(errorCode) {
 					DLOG(ERROR) << "error:" << errorCode.message();
@@ -408,9 +407,10 @@ namespace network {
 		}
 
 		void write_local_socks5() {
+			auto self(shared_from_this());
 			this->set_timeout(method_->timeout());
 			asio::async_write(socket_, asio::buffer(in_buf, 10),
-				[this](const error_code& errorCode, std::size_t len) {
+				[this, self](const error_code& errorCode, std::size_t len) {
 				this->cancel_timeout();
 				if(errorCode) {
 					closeSocket();
@@ -422,17 +422,18 @@ namespace network {
 		}
 
 		void do_read(int direction) {
+			this->set_timeout(method_->timeout());
 			auto self(shared_from_this());
 			if (direction & 0x01) {
 				asio::async_read(socket_, asio::buffer(in_buf), asio::transfer_at_least(1),
 					[this, self](const error_code& errorCode, std::size_t len) {
+					this->cancel_timeout();
 					if (errorCode) {
 						DLOG(ERROR) << "do read up error:" << errorCode.message();
 						closeSocket();
 						return;
 					}
 
-					//DLOG(INFO) << "the index: "<< id << "--> " << std::to_string(len) << " bytes";
 					total_upload += len;
 					do_write(1, len);
 				});
@@ -448,7 +449,6 @@ namespace network {
 						return;
 					}
 
-					//DLOG(INFO) << "the index: "<< id << "<-- " << std::to_string(len) << " bytes";
 					total_download += len;
 					do_write(2, len);
 				});
@@ -456,12 +456,13 @@ namespace network {
 		}
 
 		void do_write(int direction, std::size_t length) {
+			this->set_timeout(method_->timeout());
 			auto self(shared_from_this());
 			switch (direction) {
 			case 1:
-				sendInProgress_ = true;
 				asio::async_write(remote_socket_, asio::buffer(in_buf, length),
 					[this, self, direction](const error_code& errorCode, std::size_t len) {
+					this->cancel_timeout();
 					if (errorCode) {
 						closeSocket();
 						return;
@@ -471,7 +472,6 @@ namespace network {
 				break;
 
 			case 2:
-				sendInProgress_ = true;
 				asio::async_write(socket_, asio::buffer(out_buf, length),
 					[this, self, direction](const error_code& errorCode, std::size_t len) {
 					if (errorCode) {
@@ -486,49 +486,15 @@ namespace network {
 
 		void closeSocket()
 		{
-			if(closing_)
-				return;
-			closing_ = true;
+			error_code error;
 
-			if (socket_.is_open())
-			{
-				error_code error;
-
-				socket_.shutdown(asio::ip::tcp::socket::shutdown_type::shutdown_both, error);
-				if (error)
-				{
-					DLOG(ERROR) << __func__ << ": in_socket_ could not shutdown socket: " << error.message();
-				}
-				socket_.close();
-				if (error)
-				{
-					DLOG(ERROR) << __func__ << ": socket could not close socket: " << error.message();
-				}
-			}
-
-			if (remote_socket_.lowest_layer().is_open())
-			{
-				error_code error;
-
-				remote_socket_.lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_type::shutdown_both, error);
-				if (error)
-				{
-					DLOG(ERROR) << __func__ << ": in_remote_socket_ could not shutdown socket: " << error.message();
-				}
-				remote_socket_.lowest_layer().close(error);
-				if (error)
-				{
-					DLOG(ERROR) << __func__ << ": socket could not close socket: " << error.message();
-				}
-			}
-
-			//if ((!receiveInProgress_ && !sendInProgress_) || (receiveInProgress_ && sendInProgress_))
-			{
-				socket_.close(); remote_socket_.lowest_layer().close();
-				DLOG(WARNING) << "index: " << id << " dying.";
-				// Time to delete this instance
-				method_->onDisconnected();
-			}
+			socket_.lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_type::shutdown_both, error);
+			socket_.lowest_layer().close(error);
+			remote_socket_.lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_type::shutdown_both, error);
+			remote_socket_.lowest_layer().close(error);
+			DLOG(WARNING) << "index: " << id << " dying.";
+			// Time to delete this instance
+			method_->onDisconnected();
 		}
 
 		asio::ip::tcp::socket socket_;
@@ -537,7 +503,6 @@ namespace network {
 		std::unique_ptr<asio::steady_timer> timer_;
 
 		bool closing_;
-		bool sendInProgress_;
 		bool is_auth, out_auth;
 
 		// I/O Buffers
