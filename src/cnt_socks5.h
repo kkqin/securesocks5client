@@ -408,7 +408,7 @@ namespace network {
 			this->set_timeout(method_->timeout());
 			auto self(shared_from_this());
 			if (direction & 0x01) {
-				asio::async_read(socket_, asio::buffer(in_buf), asio::transfer_at_least(1),
+				socket_.async_read_some(asio::buffer(in_buf),
 					[this, self](const error_code& errorCode, std::size_t len) {
 					this->cancel_timeout();
 					if (errorCode) {
@@ -423,7 +423,7 @@ namespace network {
 			}
 
 			if (direction & 0x02) {
-				asio::async_read(remote_socket_, asio::buffer(out_buf), asio::transfer_at_least(1),
+				remote_socket_.async_read_some(asio::buffer(out_buf),
 					[this, self](const error_code& errorCode, std::size_t len) {
 					this->cancel_timeout();
 					if (errorCode) {
@@ -457,6 +457,7 @@ namespace network {
 			case 2:
 				asio::async_write(socket_, asio::buffer(out_buf, length),
 					[this, self, direction](const error_code& errorCode, std::size_t len) {
+					this->cancel_timeout();
 					if (errorCode) {
 						closeSocket();
 						return;
