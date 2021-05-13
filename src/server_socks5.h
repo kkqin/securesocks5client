@@ -25,12 +25,11 @@ namespace network {
 			: index(0), acceptor_(network::IOMgr::instance().netIO().get(),
 				port,
 				[this, onClientConnected](asio::ip::tcp::socket&& socket) {
-					//DLOG(INFO) << ("onAccept()");
 					asio::ssl::context ctx(asio::ssl::context::sslv23);
 					ctx.load_verify_file("ca.pem");
 
 					auto cnt = std::make_shared<Socks5ConnectionImpl<Method>>(std::move(socket), std::move(ctx), index++);
-					onClientConnected(cnt);
+					onClientConnected(std::move(cnt));
 				})
 		{
 		}

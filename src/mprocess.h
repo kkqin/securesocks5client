@@ -25,7 +25,7 @@ namespace network {
 	class Process
 	{
 	public:
-		void onRecvGameMsg(std::shared_ptr<network::Connection> cnt);
+		void onRecvGameMsg(const std::shared_ptr<network::Connection> &cnt);
 	private:
 		static int m_index;
 		std::set<std::shared_ptr<network::Connection>> m_group;

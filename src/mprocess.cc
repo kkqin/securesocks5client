@@ -10,7 +10,6 @@ namespace network {
 
 	void MyMethod::onDisconnected()
 	{
-		DLOG(WARNING) << "connect reset";
 		m_cnt.reset();
 	}
 
@@ -19,7 +18,7 @@ namespace network {
 		return m_timeout;
 	}
 
-	void Process::onRecvGameMsg(std::shared_ptr<network::Connection> cnt)
+	void Process::onRecvGameMsg(const std::shared_ptr<network::Connection> &cnt)
 	{
 		cnt->init();
 		//DLOG(INFO) << ("onRecvGameMsg end.");
